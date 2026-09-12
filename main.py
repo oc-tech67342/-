@@ -5,7 +5,7 @@ from threading import Thread
 import discord
 from discord.ext import commands
 
-# --- 1. سيرفر الويب البسيط ---
+# --- 1. خادم الويب (Flask) لإبقاء الخدمة متصلة ---
 app = Flask('')
 
 @app.route('/')
@@ -17,9 +17,10 @@ def run():
 
 def keep_alive():
     t = Thread(target=run)
+    t.daemon = True
     t.start()
 
-# --- 2. كود البوت ---
+# --- 2. إعدادات البوت والـ Intents ---
 BOT_TOKEN = os.getenv("DISCORD_TOKEN")
 AFK_VOICE_CHANNEL_ID = 1350135312013201450
 
@@ -32,19 +33,27 @@ afk_users = {}
 
 @bot.event
 async def on_ready():
-    print(f'✅ البوت {bot.user} متصل بنجاح!')
+    print(f'✅ البوت {bot.user} متصل بالشبكة بنجاح!')
     channel = bot.get_channel(AFK_VOICE_CHANNEL_ID)
+    
     if channel:
+        print(f'📌 جاري محاولة الاتصال بالروم الصوتي: {channel.name}')
         try:
-            await channel.connect()
-            print(f'🔊 دخل البوت بنجاح إلى روم AFK: {channel.name}')
+            # الاتصال بالقناة الصوتية أو الانتقال إليها
+            if not channel.guild.voice_client:
+                await channel.connect(reconnect=True, timeout=30.0)
+                print(f'🔊 دخل البوت بنجاح إلى: {channel.name}')
+            else:
+                await channel.guild.voice_client.move_to(channel)
+                print(f'🔊 تم نقل البوت إلى: {channel.name}')
         except Exception as e:
-            print(f'❌ خطأ أثناء الاتصال بالصوت: {e}')
+            print(f'❌ خطأ أثناء الاتصال الصوتي (تأكد من PyNaCl والصلاحيات): {e}')
     else:
-        print(f'❌ لم يتم العثور على روم الصوت ID: {AFK_VOICE_CHANNEL_ID}')
+        print(f'❌ لم يتم العثور على الروم ID: {AFK_VOICE_CHANNEL_ID}')
 
 @bot.event
 async def on_voice_state_update(member, before, after):
+    # إعادة البوت إلى روم AFK إذا تم إخراجه أو تحريكه
     if member.id != bot.user.id or before.channel == after.channel:
         return
 
@@ -55,7 +64,7 @@ async def on_voice_state_update(member, before, after):
                 if member.guild.voice_client:
                     await member.guild.voice_client.move_to(afk_channel)
                 else:
-                    await afk_channel.connect()
+                    await afk_channel.connect(reconnect=True, timeout=30.0)
             except Exception as e:
                 print(f'⚠️ تعذر إعادة البوت لـ AFK: {e}')
 
@@ -64,11 +73,13 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    # الرد عند إشارة إلى شخص في وضع AFK
     for mention in message.mentions:
         if mention.id in afk_users:
             reason = afk_users[mention.id]["reason"]
             await message.reply(f"🔇 **{mention.display_name}** غير متواجد (AFK). السبب: {reason}")
 
+    # إلغاء وضع AFK عند إرسال رسالة
     if message.author.id in afk_users:
         member = message.author
         data = afk_users.pop(member.id)
@@ -125,4 +136,4 @@ keep_alive()
 if BOT_TOKEN:
     bot.run(BOT_TOKEN)
 else:
-    print("❌ لم يتم العثور على DISCORD_TOKEN!")
+    print("❌ لم يتم العثور على DISCORD_TOKEN في متغيرات البيئة!")
