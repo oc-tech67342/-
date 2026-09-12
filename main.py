@@ -5,18 +5,21 @@ from threading import Thread
 import discord
 from discord.ext import commands
 
-# --- 1. خادم الويب (Flask) ---
+# --- 1. سيرفر الويب البسيط ---
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is Live!"
+    return "Bot is online!"
 
-def run_flask():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+def run():
+    app.run(host='0.0.0.0', port=10000)
 
-# --- 2. إعدادات البوت ---
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# --- 2. كود البوت ---
 BOT_TOKEN = os.getenv("DISCORD_TOKEN")
 AFK_VOICE_CHANNEL_ID = 1350135312013201450
 
@@ -29,26 +32,16 @@ afk_users = {}
 
 @bot.event
 async def on_ready():
-    print(f'✅ البوت {bot.user} سجل الدخول بنجاح!')
-    guilds = [g.name for g in bot.guilds]
-    print(f'🌐 السيرفرات المتواجد بها البوت: {guilds}')
-
+    print(f'✅ البوت {bot.user} متصل بنجاح!')
     channel = bot.get_channel(AFK_VOICE_CHANNEL_ID)
     if channel:
-        print(f'📌 تم العثور على الروم الصوتي: {channel.name}')
         try:
-            if bot.voice_clients:
-                for vc in bot.voice_clients:
-                    if vc.guild == channel.guild:
-                        await vc.move_to(channel)
-                        break
-            else:
-                await channel.connect()
-            print(f'🔊 دخل البوت بنجاح إلى: {channel.name}')
+            await channel.connect()
+            print(f'🔊 دخل البوت بنجاح إلى روم AFK: {channel.name}')
         except Exception as e:
-            print(f'❌ فشل الاتصال بالروم الصوتي: {e}')
+            print(f'❌ خطأ أثناء الاتصال بالصوت: {e}')
     else:
-        print(f'❌ لم يتم العثور على روم بالـ ID: {AFK_VOICE_CHANNEL_ID}')
+        print(f'❌ لم يتم العثور على روم الصوت ID: {AFK_VOICE_CHANNEL_ID}')
 
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -64,7 +57,7 @@ async def on_voice_state_update(member, before, after):
                 else:
                     await afk_channel.connect()
             except Exception as e:
-                print(f'⚠️ تعذر إرجاع البوت إلى AFK: {e}')
+                print(f'⚠️ تعذر إعادة البوت لـ AFK: {e}')
 
 @bot.event
 async def on_message(message):
@@ -127,17 +120,9 @@ async def afk(ctx, *, reason: str = "لم يحدد سببًا."):
     }
     await ctx.send(f"✅ **{member.display_name}** دخل وضع AFK. السبب: {reason}")
 
-# --- 3. التشغيل الموحد ---
-async def start_services():
-    # تشغيل سيرفر Flask في خيط مستقل
-    flask_thread = Thread(target=run_flask, daemon=True)
-    flask_thread.start()
-    
-    # تشغيل البوت
-    if BOT_TOKEN:
-        await bot.start(BOT_TOKEN)
-    else:
-        print("❌ لم يتم العثور على DISCORD_TOKEN!")
-
-if __name__ == "__main__":
-    asyncio.run(start_services())
+# --- 3. تشغيل الخادم والبوت ---
+keep_alive()
+if BOT_TOKEN:
+    bot.run(BOT_TOKEN)
+else:
+    print("❌ لم يتم العثور على DISCORD_TOKEN!")
