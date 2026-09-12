@@ -5,7 +5,7 @@ from threading import Thread
 import discord
 from discord.ext import commands
 
-# --- 1. خادم الويب (Flask) ---
+# --- 1. خادم الويب (Flask) لإبقاء الخدمة نشطة في Render ---
 app = Flask('')
 
 @app.route('/')
@@ -18,7 +18,7 @@ def run_flask():
 
 # --- 2. إعدادات الديسكورد ---
 BOT_TOKEN = os.getenv("DISCORD_TOKEN")
-AFK_VOICE_CHANNEL_ID = 1350135312013201450
+AFK_VOICE_CHANNEL_ID = 1350135312013201450  # تأكد أن هذا هو ID الروم الصوتي
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -29,9 +29,15 @@ afk_users = {}
 
 @bot.event
 async def on_ready():
-    print(f'✅ البوت {bot.user} جاهز للعمل!')
+    print(f'✅ البوت {bot.user} سجل الدخول بنجاح!')
+    
+    # طباعة السيرفرات المتواجد بها البوت للتأكد
+    guilds = [g.name for g in bot.guilds]
+    print(f'🌐 البوت موجود في السيرفرات التالية: {guilds}')
+
     channel = bot.get_channel(AFK_VOICE_CHANNEL_ID)
     if channel:
+        print(f'📌 تم العثور على الروم الصوتي: {channel.name}')
         try:
             if bot.voice_clients:
                 for vc in bot.voice_clients:
@@ -40,11 +46,11 @@ async def on_ready():
                         break
             else:
                 await channel.connect()
-            print(f'✅ دخل البوت {bot.user} إلى روم AFK: {channel.name}')
+            print(f'🔊 دخل البوت بنجاح إلى: {channel.name}')
         except Exception as e:
-            print(f'⚠️ فشل دخول البوت إلى AFK: {e}')
+            print(f'❌ فشل الاتصال بالروم الصوتي بسبب: {e}')
     else:
-        print(f'❌ لم يتم العثور على روم AFK بالـ ID: {AFK_VOICE_CHANNEL_ID}')
+        print(f'❌ لم يتم العثور على روم بهذا الـ ID: {AFK_VOICE_CHANNEL_ID}')
 
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -67,11 +73,13 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    # الرد عند منشن شخص في وضع AFK
     for mention in message.mentions:
         if mention.id in afk_users:
             reason = afk_users[mention.id]["reason"]
             await message.reply(f"🔇 **{mention.display_name}** غير متواجد (AFK). السبب: {reason}")
 
+    # إزالة وضع AFK عند إرسال رسالة
     if message.author.id in afk_users:
         member = message.author
         data = afk_users.pop(member.id)
@@ -123,15 +131,12 @@ async def afk(ctx, *, reason: str = "لم يحدد سببًا."):
     }
     await ctx.send(f"✅ **{member.display_name}** دخل وضع AFK. السبب: {reason}")
 
-# --- 3. التشغيل الرئيسي المباشر ---
+# --- 3. التشغيل ---
 if __name__ == "__main__":
     if not BOT_TOKEN:
         print("❌ لم يتم العثور على DISCORD_TOKEN في متغيرات البيئة!")
     else:
-        # تشغيل خادم Flask في خلفية العمل
         t = Thread(target=run_flask)
         t.daemon = True
         t.start()
-        
-        # تشغيل ديسكورد بوت فوراً
         bot.run(BOT_TOKEN)
